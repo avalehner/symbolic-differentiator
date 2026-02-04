@@ -1,25 +1,23 @@
-//Write a symbolic differentiator for polynomial expressions of one variable.
-
 //npm install prompts 
 const prompts = require('prompts')
 
 //functions 
 const endDifferentiator = () => {
-  console.log('You have ended symbolic differentator. Goodbye!')
+  console.log('You have ended symbolic differentiator. Goodbye!')
   process.exit()
 }
 
 const getVariable = (polynomial) => {
-  const variablesArr = polynomial.match(/[a-zA-Z]/g)  
+  const variablesArr = polynomial.match(/[a-zA-Z]/g) //extracts variable 
 
   if(!variablesArr) {
     return {
       variable: null, 
-      singleVariable: false
+      singleVariable: true
     }
   }
 
-  const isSingleVariable = variablesArr.every(variable => variable === variablesArr[0])
+const isSingleVariable = variablesArr.every(variable => variable === variablesArr[0]) //checks that there is only one variable present in inputted function
 
   return {
     variable: variablesArr[0], 
@@ -29,18 +27,10 @@ const getVariable = (polynomial) => {
 
 const getPolynomialTerms = (polynomial) => {
   polynomial = polynomial.replace(/\s/g, '') //finds white spaces and replaces with empty string 
+  polynomial = polynomial.replace(/^\+/,'') //remove leading + 
 
   const terms = polynomial.split(/(?=[+\-])/) //?= positive look ahead 
-
-  if(terms[0].startsWith('+')) {
-    terms[0] = terms[0].slice(1)
-  }
-
   return terms 
-}
-
-const getPolynomialOperatorsArr = (polynomial) => {
-  return polynomial.match(/[+\-]/g)
 }
 
 const getCoefficientFromTerm = (term, variable) => {
@@ -49,14 +39,18 @@ const getCoefficientFromTerm = (term, variable) => {
   if(term.startsWith(variable)) return 1 
   if(term.startsWith('-' + variable)) return -1 
 
-  const coefficient = term.match(/^-?\d+/) //pulls number from beginning of term, optional '-' sign (?) \d pulls all numbers
-  return coefficient ? parseInt(coefficient[0]) : 1 //if coefficient exists turn into integer, if it does not return 1 (safety for edge cases)
+  const coefficient = term.match(/^[-\+]?\d+/) //pulls number from beginning of term, optional - or + sign; ?\d pulls all numbers
+  return coefficient ? parseInt(coefficient[0]) : 1 //if coefficient exists turn into integer (removes +)
 }
 
 const differentiate = (polynomial) => {
   const polynomialTerms = getPolynomialTerms(polynomial)
-  const operators = getPolynomialOperatorsArr(polynomial)
-  const variable = getVariable(polynomial).variable 
+  const variableObj = getVariable(polynomial)
+  const variable = variableObj.variable 
+
+  if (!variable) {
+    return '0'
+  }
 
   //get exponents + coefficients 
   const exponentAndCoefficientArr = polynomialTerms.map((term) => {
@@ -70,17 +64,20 @@ const differentiate = (polynomial) => {
       exponent = 0 
     }
   
-  //calculate differentiated coefficient 
   const coefficient = getCoefficientFromTerm(term, variable)
 
+  //calculate differentiated coefficient 
   return {
     differentiatedCoefficient: exponent * coefficient, 
     differentiatedExponent : exponent - 1  
   }})
 
-  const derivativeArr = exponentAndCoefficientArr.map((term, index) => {
+  const derivativeArr = exponentAndCoefficientArr.map((term, index) => {    
     //skip terms with negative exponents
     if(term.differentiatedExponent < 0) return undefined 
+
+    //skip terms with coefficient of 0 
+    if(term.differentiatedCoefficient === 0) return undefined
 
     let termString 
     if (term.differentiatedExponent > 1) {
@@ -91,15 +88,25 @@ const differentiate = (polynomial) => {
       termString = `${term.differentiatedCoefficient}`
     } 
 
-    if (index === 0 || !operators) return termString
-    return `${operators[index - 1]} ${termString}` 
-
+    if (termString.startsWith('-')) {
+      const positiveVersion = termString.slice(1)
+      return `- ${positiveVersion}`
+    } else { 
+      return `+ ${termString}` 
+    }
   })
 
-  //remove unneccesary terms
-  const derivative = derivativeArr.filter((term)=>{
-    return term !== undefined 
-  }).join(' ')
+  //remove undefined terms
+  const filteredDerivativeArr = derivativeArr.filter((term)=>term !== undefined)
+
+  if (filteredDerivativeArr.length === 0) return '0'
+
+  //remove leading + if on first term 
+  if (filteredDerivativeArr[0].startsWith('+ ')) {
+    filteredDerivativeArr[0] = filteredDerivativeArr[0].slice(2)
+  }
+
+  const derivative = filteredDerivativeArr.join(' ')
 
   return derivative
 }
@@ -121,16 +128,21 @@ const runDifferentiator = async () => {
       const variableObj = getVariable(polynomial)
 
       if (polynomial.trim() === '') {
-        return 'Please enter a single variable polynomial. (eg: 9x^2 + x + 1)'
-      }
-    
-      if (!variableObj.singleVariable) {
-        return 'Please enter a single variable polynomial. (eg: 9x^2 + x + 1)'
+        return 'Please enter a single variable polynomial. (ex: 9x^2 + x + 1)'      
       }
 
-      if(polynomial.includes('^') && !polynomial.includes(variableObj.variable)) {
-        return 'Please enter an exponent after your variable'
+      if (!/^[a-zA-Z0-9+\-^\s]+$/.test(polynomial)) {
+        return 'Please enter only letters, numbers, +, -, and ^ (for exponents)'
       }
+
+      if (!variableObj.singleVariable) {
+        return 'Please enter a single variable polynomial. (ex: 9x^2 + x + 1)'
+      }
+
+      if (/\^(?!\d+)|(^|[^a-zA-Z])\^/.test(polynomial)) {
+        return 'Please format your exponent correctly, exponents must follow variables (ex: x^2; 3x^5)'
+      }
+
       return true 
     } 
   }, { onCancel: endDifferentiator })
@@ -159,14 +171,12 @@ const runDifferentiator = async () => {
   }, { onCancel: endDifferentiator })
 
   if (menu.repeat === undefined || menu.repeat === 'no') {
-    console.log('You have ended symbolic differentator. Goodbye!')
-    process.exit(0)
+    endDifferentiator()
   }
   
   if(menu.repeat === 'yes') {
     await runDifferentiator()
   }
-
 }
 
 runDifferentiator()
